@@ -28,16 +28,13 @@ jobs:
         pip install -r backend_django/requirements.txt
 
     - name: Run Django Checks
-      run: |
-        cd backend_django
-        python manage.py check
+      working-directory: backend_django
+      run: python manage.py check
 
     - name: Run Migrations
-      run: |
-        cd backend_django
-        python manage.py migrate
+      working-directory: backend_django
+      run: python manage.py migrate
 
     - name: Run Tests
-      run: |
-        cd backend_django
-        python manage.py test
+      working-directory: backend_django
+      run: python manage.py test
