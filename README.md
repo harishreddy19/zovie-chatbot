@@ -1,0 +1,1 @@
+Zoikon AI Chatbot is a real-time web-based assistant built using FastAPI, JavaScript, and MySQL. It provides intent-based responses, voice input support, dynamic menus, user feedback collection, and stores unresolved issues in a database for live-agent follow-up.
