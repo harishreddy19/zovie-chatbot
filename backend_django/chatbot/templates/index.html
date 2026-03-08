@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
 <head>
 <meta charset="UTF-8">
@@ -12,8 +11,6 @@ font-family:Segoe UI;
 background:#f4f5f7;
 margin:0;
 }
-
-/* CHAT BUTTON */
 
 #chat-toggle{
 position:fixed;
@@ -30,8 +27,6 @@ cursor:pointer;
 box-shadow:0 10px 30px rgba(0,0,0,.3);
 }
 
-/* CHAT WINDOW */
-
 #chatbot{
 position:fixed;
 bottom:100px;
@@ -45,8 +40,6 @@ flex-direction:column;
 box-shadow:0 30px 80px rgba(0,0,0,.25);
 overflow:hidden;
 }
-
-/* HEADER */
 
 #header{
 background:linear-gradient(90deg,#7c3aed,#9333ea);
@@ -68,16 +61,12 @@ width:34px;
 border-radius:50%;
 }
 
-/* MESSAGES */
-
 #messages{
 flex:1;
 padding:18px;
 overflow-y:auto;
 background:#f9fafb;
 }
-
-/* BOT */
 
 .bot-row{
 display:flex;
@@ -96,9 +85,8 @@ padding:12px 14px;
 border-radius:14px;
 max-width:75%;
 font-size:14px;
+line-height:1.5;
 }
-
-/* USER */
 
 .user-bubble{
 background:#7c3aed;
@@ -108,9 +96,9 @@ border-radius:14px;
 margin-left:auto;
 margin-bottom:12px;
 max-width:75%;
+font-size:14px;
+word-break:break-word;
 }
-
-/* QUICK BUTTONS */
 
 .quick{
 display:flex;
@@ -127,6 +115,7 @@ padding:6px 12px;
 border-radius:18px;
 cursor:pointer;
 font-size:12px;
+transition:all .2s;
 }
 
 .quick button:hover{
@@ -134,34 +123,49 @@ background:#7c3aed;
 color:white;
 }
 
-/* INPUT */
+#mic-status{
+font-size:11px;
+color:#9333ea;
+text-align:center;
+padding:2px 12px 4px;
+min-height:16px;
+font-style:italic;
+}
 
 #input-area{
 display:flex;
 gap:8px;
 padding:12px;
 border-top:1px solid #eee;
+align-items:center;
 }
 
 #user-input{
 flex:1;
-padding:10px;
+padding:10px 14px;
 border-radius:20px;
 border:1px solid #ccc;
+font-size:14px;
+outline:none;
+font-family:Segoe UI;
 }
 
 #send,#mic{
 background:#7c3aed;
 border:none;
 color:white;
-padding:10px;
+width:40px;
+height:40px;
 border-radius:50%;
 cursor:pointer;
+font-size:16px;
+display:flex;
+align-items:center;
+justify-content:center;
+flex-shrink:0;
 }
 
-/* MIC ANIMATION */
-
-.listening{
+#mic.listening{
 animation:pulse 1s infinite;
 background:red !important;
 }
@@ -172,12 +176,11 @@ background:red !important;
 100%{transform:scale(1)}
 }
 
-/* STARS */
-
 .star{
 font-size:22px;
 cursor:pointer;
 color:#ccc;
+transition:color .2s;
 }
 
 .star.active{
@@ -187,13 +190,19 @@ color:gold;
 .feedback-input{
 width:100%;
 padding:8px;
-margin-top:5px;
+margin-top:6px;
 border-radius:8px;
 border:1px solid #ccc;
+box-sizing:border-box;
+font-family:Segoe UI;
+font-size:13px;
+}
+
+.rating-row{
+padding:4px 0 12px;
 }
 
 </style>
-
 </head>
 
 <body>
@@ -201,463 +210,433 @@ border:1px solid #ccc;
 <button id="chat-toggle">💬</button>
 
 <div id="chatbot">
+  <div id="header">
+    <div class="header-left">
+      <img src="/static/assets/logo.png">
+      <div><b>Zovie</b><br><small>🤖⚡</small></div>
+    </div>
+    <span id="close" style="cursor:pointer">✕</span>
+  </div>
 
-<div id="header">
-<div class="header-left">
-<img src="/static/assets/logo.png">
-<div>
-<b>Zovie</b><br>
-<small>🤖⚡</small>
-</div>
-</div>
-<span id="close">✕</span>
-</div>
+  <div id="messages"></div>
+  <div id="mic-status"></div>
 
-<div id="messages"></div>
-
-<div id="input-area">
-<button id="mic">🎤</button>
-<input id="user-input" placeholder="Ask anything...">
-<button id="send">➤</button>
-</div>
-
+  <div id="input-area">
+    <button id="mic">🎤</button>
+    <input id="user-input" placeholder="Ask anything...">
+    <button id="send">➤</button>
+  </div>
 </div>
 
 <script>
 
-const messages=document.getElementById("messages")
-const input=document.getElementById("user-input")
-const mic=document.getElementById("mic")
+const messages  = document.getElementById("messages")
+const input     = document.getElementById("user-input")
+const micBtn    = document.getElementById("mic")
+const sendBtn   = document.getElementById("send")
+const micStatus = document.getElementById("mic-status")
 
-let selectedRating=0
-
-/* SPEECH */
+let selectedRating = 0
+let isSending      = false
+let isListening    = false
+let recognition    = null
 
 function speak(text){
-
-let clean=text.replace(/⭐|★/g,"")
-
-speechSynthesis.cancel()
-
-const utter=new SpeechSynthesisUtterance(clean)
-
-utter.lang="en-GB"
-
-speechSynthesis.speak(utter)
-
+  speechSynthesis.cancel()
+  const u = new SpeechSynthesisUtterance(text.replace(/[⭐★]/g,""))
+  u.lang = "en-GB"
+  speechSynthesis.speak(u)
 }
 
-/* BOT MESSAGE */
+function bot(text, buttons = []){
+  const row = document.createElement("div")
+  row.className = "bot-row"
+  row.innerHTML = `
+    <div class="bot-avatar"><img src="/static/assets/logo.png"></div>
+    <div class="bot-bubble">${text}</div>
+  `
+  messages.appendChild(row)
 
-function bot(text,buttons=[]){
+  if(buttons.length){
+    const quick = document.createElement("div")
+    quick.className = "quick"
+    buttons.forEach(b => {
+      const btn = document.createElement("button")
+      if(typeof b === "object"){
+        btn.innerText = b.text
+        btn.onclick = () => window.open(b.url, "_blank")
+      } else {
+        btn.innerText = b
+        btn.onclick = () => {
+          userBubble(b)
+          processChoice(b)
+        }
+      }
+      quick.appendChild(btn)
+    })
+    row.querySelector(".bot-bubble").appendChild(quick)
+  }
 
-const row=document.createElement("div")
-row.className="bot-row"
-
-row.innerHTML=`
-<div class="bot-avatar">
-<img src="/static/assets/logo.png">
-</div>
-<div class="bot-bubble">${text}</div>
-`
-
-messages.appendChild(row)
-
-if(buttons.length){
-
-const quick=document.createElement("div")
-quick.className="quick"
-
-buttons.forEach(b=>{
-
-const btn=document.createElement("button")
-
-if(typeof b==="object"){
-btn.innerText=b.text
-btn.onclick=()=>window.open(b.url,"_blank")
-}else{
-btn.innerText=b
-btn.onclick=()=>menuHandler(b)
+  messages.scrollTop = messages.scrollHeight
+  speak(text)
 }
 
-quick.appendChild(btn)
-
-})
-
-row.querySelector(".bot-bubble").appendChild(quick)
-
+function userBubble(text){
+  const div = document.createElement("div")
+  div.className = "user-bubble"
+  div.innerText = text
+  messages.appendChild(div)
+  messages.scrollTop = messages.scrollHeight
 }
-
-messages.scrollTop=messages.scrollHeight
-
-speak(text)
-
-}
-
-/* USER */
-
-function user(text){
-messages.innerHTML+=`<div class="user-bubble">${text}</div>`
-}
-
-/* MAIN MENU */
 
 function mainMenu(){
-
-bot(
-"Hello! I'm Zovie, your Zoiko mobile assistant. Please select a service.",
-[
-"Zoiko Plans",
-"Business Deals",
-"Devices",
-"Animals & Music",
-"About Us",
-"Activate SIM",
-"Top Up",
-"Switch & Save",
-"Contact Us",
-"Support",
-"International Calls",
-"Exit"
-])
-
+  bot(
+    "Hello! I'm Zovie, your Zoiko mobile assistant. Please select a service.",
+    [
+      "Zoiko Plans","Business Deals","Devices","Animals & Music","About Us",
+      "Activate SIM","Top Up","Switch & Save","Contact Us","Support",
+      "International Calls","Exit"
+    ]
+  )
 }
 
-/* MENU */
-
-function menuHandler(choice){
-
-user(choice)
-
-switch(choice){
-
-case "Zoiko Plans":
-
-bot(
-"Zoiko Mobile offers affordable SIM-only plans designed for students, professionals, and families. Our plans provide fast 4G/5G connectivity, flexible pricing, and reliable UK coverage. Choose a category below to explore detailed plans and offers.",
-[
-"Student Plans",
-"Essential Plans",
-"Social Tariff",
-"Data Only Plans",
-"30 Day Plans",
-"Back"
-])
-
-break
-
-case "Student Plans":
-
-bot(
-"Our Student Discount Programme helps students save money while staying connected. Students receive special discounts on monthly SIM-only plans and even get a free SIM card when switching networks. It’s designed for students who want reliable service at an affordable price.",
-[
-{text:"View Student Plans",url:"https://zoikomobile.co.uk/student-discount-programme/"},
-"Back"
-])
-
-break
-
-case "Essential Plans":
-
-bot(
-"Zoiko Essential Plans provide exclusive discounts for public sector workers and their families. These plans offer long-term savings while maintaining premium mobile connectivity and reliable customer support.",
-[
-{text:"View Essential Plans",url:"https://zoikomobile.co.uk/civilservants/"},
-"Back"
-])
-
-break
-
-case "Social Tariff":
-
-bot(
-"Zoiko Social Tariff Plans are designed for individuals and families looking for affordable mobile connectivity. These plans provide cost-effective mobile services to help bridge the digital divide.",
-[
-{text:"View Social Tariff Plans",url:"https://zoikomobile.co.uk/social-tariff-plans/"},
-"Back"
-])
-
-break
-
-case "Data Only Plans":
-
-bot(
-"Our Data Only Plans are perfect for tablets, laptops, and mobile hotspots. They offer flexible data packages that allow you to stay connected anywhere without traditional voice plans.",
-[
-{text:"View Data Plans",url:"https://zoikomobile.co.uk/data-only-plans/"},
-"Back"
-])
-
-break
-
-case "30 Day Plans":
-
-bot(
-"Zoiko 30-Day Plans provide flexible monthly contracts with no long commitments. Enjoy high-speed internet, clear calls, and affordable pricing with the freedom to change plans anytime.",
-[
-{text:"View 30 Day Plans",url:"https://zoikomobile.co.uk/30-day-plan/"},
-"Back"
-])
-
-break
-
-case "Business Deals":
-
-bot(
-"Zoiko Business Deals provide mobile solutions designed for businesses of all sizes. Companies can benefit from cost-effective SIM plans, strong network coverage, and flexible connectivity for employees.",
-[
-{text:"Explore Business Deals",url:"https://zoikomobile.co.uk/business-deals_sim-only-plans/"},
-"Back"
-])
-
-break
-
-case "Devices":
-
-bot(
-"Zoiko offers a range of modern smartphones and compatible devices designed to work seamlessly with our mobile network services.",
-[
-{text:"View Devices",url:"https://zoikomobile.co.uk/devices/"},
-"Back"
-])
-
-break
-
-case "Animals & Music":
-
-bot(
-"Animals & Music is a unique Zoiko experience designed to entertain users while promoting creative digital engagement.",
-[
-{text:"Explore Animals & Music",url:"https://zoikomobile.co.uk/animals-and-music/"},
-"Back"
-])
-
-break
-
-case "About Us":
-
-bot(
-"Zoiko Mobile UK is part of the Zoiko Communications Group, providing innovative mobile connectivity with affordable SIM-only plans, 5G support, EU roaming, and reliable customer support.",
-[
-{text:"Read About Zoiko",url:"https://zoikomobile.co.uk/about-us/"},
-"Back"
-])
-
-break
-
-case "Activate SIM":
-
-bot(
-"Activating your Zoiko SIM is simple and quick. Just follow the activation steps online to start using your new mobile plan immediately.",
-[
-{text:"Activate SIM",url:"https://zoikomobile.co.uk/activate-your-sim/"},
-"Back"
-])
-
-break
-
-case "Top Up":
-
-bot(
-"You can recharge your Zoiko SIM easily using the online top-up portal. Simply select your plan and complete the payment process to continue enjoying uninterrupted service.",
-[
-{text:"Top Up Now",url:"https://zoikomobile.co.uk/recharge/"},
-"Back"
-])
-
-break
-
-case "Switch & Save":
-
-bot(
-"Switching to Zoiko Mobile allows you to enjoy affordable plans, reliable coverage, and seamless connectivity while saving money on your monthly mobile expenses.",
-[
-{text:"Switch to Zoiko",url:"https://zoikomobile.co.uk/switch-and-save/"},
-"Back"
-])
-
-break
-
-case "Contact Us":
-
-bot(
-"If you need assistance or have questions about Zoiko services, you can reach our support team through the contact page.",
-[
-{text:"Contact Zoiko",url:"https://zoikomobile.co.uk/contact-us/"},
-"Back"
-])
-
-break
-
-case "Support":
-
-bot(
-"Zoiko Support provides help with billing, SIM activation, network issues, and general service inquiries.",
-[
-{text:"Visit Support",url:"https://zoikomobile.co.uk/support/"},
-"Back"
-])
-
-break
-
-case "International Calls":
-
-bot(
-"Zoiko offers international calling to more than 80 countries. Stay connected with family, friends, and colleagues worldwide without worrying about high call costs.",
-[
-{text:"International Calling Details",url:"https://zoikomobile.co.uk/international-calling/"},
-"Back"
-])
-
-break
-
-case "Back":
-mainMenu()
-break
-
-case "Exit":
-showRating()
-break
-
+const menuMap = {
+  "zoiko plans"        : "Zoiko Plans",
+  "plans"              : "Zoiko Plans",
+  "business deals"     : "Business Deals",
+  "business"           : "Business Deals",
+  "devices"            : "Devices",
+  "device"             : "Devices",
+  "animals & music"    : "Animals & Music",
+  "animals and music"  : "Animals & Music",
+  "animals music"      : "Animals & Music",
+  "music"              : "Animals & Music",
+  "about us"           : "About Us",
+  "about"              : "About Us",
+  "activate sim"       : "Activate SIM",
+  "activate"           : "Activate SIM",
+  "sim"                : "Activate SIM",
+  "top up"             : "Top Up",
+  "topup"              : "Top Up",
+  "recharge"           : "Top Up",
+  "switch & save"      : "Switch & Save",
+  "switch and save"    : "Switch & Save",
+  "switch"             : "Switch & Save",
+  "contact us"         : "Contact Us",
+  "contact"            : "Contact Us",
+  "support"            : "Support",
+  "help"               : "Support",
+  "international calls": "International Calls",
+  "international"      : "International Calls",
+  "calling"            : "International Calls",
+  "exit"               : "Exit",
+  "bye"                : "Exit",
+  "quit"               : "Exit",
+  "back"               : "Back",
+  "go back"            : "Back",
+  "main menu"          : "Back",
+  "student plans"      : "Student Plans",
+  "student"            : "Student Plans",
+  "essential plans"    : "Essential Plans",
+  "essential"          : "Essential Plans",
+  "social tariff"      : "Social Tariff",
+  "social"             : "Social Tariff",
+  "tariff"             : "Social Tariff",
+  "data only plans"    : "Data Only Plans",
+  "data only"          : "Data Only Plans",
+  "data plans"         : "Data Only Plans",
+  "data"               : "Data Only Plans",
+  "30 day plans"       : "30 Day Plans",
+  "30 day"             : "30 Day Plans",
+  "thirty day"         : "30 Day Plans",
+  "monthly"            : "30 Day Plans"
 }
 
+function resolveChoice(text){
+  const key = text.trim().toLowerCase()
+  if(menuMap[key]) return menuMap[key]
+  let best = null, bestLen = 0
+  for(const [k, v] of Object.entries(menuMap)){
+    if(key.includes(k) && k.length > bestLen){
+      best = v; bestLen = k.length
+    }
+  }
+  return best
 }
 
-/* RATING */
+function processChoice(choice){
+  switch(choice){
+
+    case "Zoiko Plans":
+      bot(
+        "Zoiko Mobile offers affordable SIM-only plans for students, professionals, and families with fast 4G/5G and reliable UK coverage.",
+        ["Student Plans","Essential Plans","Social Tariff","Data Only Plans","30 Day Plans","Back"]
+      ); break
+
+    case "Student Plans":
+      bot(
+        "Our Student Discount Programme helps students save money — special discounts on monthly SIM-only plans and a free SIM when switching networks.",
+        [{text:"View Student Plans", url:"https://zoikomobile.co.uk/student-discount-programme/"},"Back"]
+      ); break
+
+    case "Essential Plans":
+      bot(
+        "Zoiko Essential Plans provide exclusive discounts for public sector workers and their families with long-term savings and premium connectivity.",
+        [{text:"View Essential Plans", url:"https://zoikomobile.co.uk/civilservants/"},"Back"]
+      ); break
+
+    case "Social Tariff":
+      bot(
+        "Zoiko Social Tariff Plans offer cost-effective mobile services to help bridge the digital divide for individuals and families.",
+        [{text:"View Social Tariff Plans", url:"https://zoikomobile.co.uk/social-tariff-plans/"},"Back"]
+      ); break
+
+    case "Data Only Plans":
+      bot(
+        "Our Data Only Plans are perfect for tablets, laptops, and hotspots — flexible packages without a traditional voice plan.",
+        [{text:"View Data Plans", url:"https://zoikomobile.co.uk/data-only-plans/"},"Back"]
+      ); break
+
+    case "30 Day Plans":
+      bot(
+        "Zoiko 30-Day Plans offer flexible monthly contracts with no long commitments — change anytime with high-speed internet and clear calls.",
+        [{text:"View 30 Day Plans", url:"https://zoikomobile.co.uk/30-day-plan/"},"Back"]
+      ); break
+
+    case "Business Deals":
+      bot(
+        "Zoiko Business Deals deliver mobile solutions for all business sizes — cost-effective SIM plans, strong coverage, and flexible connectivity.",
+        [{text:"Explore Business Deals", url:"https://zoikomobile.co.uk/business-deals_sim-only-plans/"},"Back"]
+      ); break
+
+    case "Devices":
+      bot(
+        "Zoiko offers modern smartphones and compatible devices designed to work seamlessly with our mobile network.",
+        [{text:"View Devices", url:"https://zoikomobile.co.uk/devices/"},"Back"]
+      ); break
+
+    case "Animals & Music":
+      bot(
+        "Animals & Music is a unique Zoiko experience designed to entertain and promote creative digital engagement.",
+        [{text:"Explore Animals & Music", url:"https://zoikomobile.co.uk/animals-and-music/"},"Back"]
+      ); break
+
+    case "About Us":
+      bot(
+        "Zoiko Mobile UK is part of the Zoiko Communications Group — affordable SIM-only plans, 5G, EU roaming, and reliable customer support.",
+        [{text:"Read About Zoiko", url:"https://zoikomobile.co.uk/about-us/"},"Back"]
+      ); break
+
+    case "Activate SIM":
+      bot(
+        "Activating your Zoiko SIM is quick and simple. Follow the steps online to start your plan immediately.",
+        [{text:"Activate SIM", url:"https://zoikomobile.co.uk/activate-your-sim/"},"Back"]
+      ); break
+
+    case "Top Up":
+      bot(
+        "Recharge your Zoiko SIM easily via the online top-up portal — pick your plan and pay to continue uninterrupted.",
+        [{text:"Top Up Now", url:"https://zoikomobile.co.uk/recharge/"},"Back"]
+      ); break
+
+    case "Switch & Save":
+      bot(
+        "Switch to Zoiko and enjoy affordable plans, reliable coverage, and seamless connectivity while saving money monthly.",
+        [{text:"Switch to Zoiko", url:"https://zoikomobile.co.uk/switch-and-save/"},"Back"]
+      ); break
+
+    case "Contact Us":
+      bot(
+        "Need help? Reach our support team through the contact page anytime.",
+        [{text:"Contact Zoiko", url:"https://zoikomobile.co.uk/contact-us/"},"Back"]
+      ); break
+
+    case "Support":
+      bot(
+        "Zoiko Support helps with billing, SIM activation, network issues, and general inquiries.",
+        [{text:"Visit Support", url:"https://zoikomobile.co.uk/support/"},"Back"]
+      ); break
+
+    case "International Calls":
+      bot(
+        "Zoiko offers international calling to 80+ countries — stay connected worldwide without high costs.",
+        [{text:"International Calling Details", url:"https://zoikomobile.co.uk/international-calling/"},"Back"]
+      ); break
+
+    case "Back":
+      mainMenu(); break
+
+    case "Exit":
+      showRating(); break
+
+    default:
+      bot(
+        "I didn't recognise that. Please choose an option below.",
+        [
+          "Zoiko Plans","Business Deals","Devices","Animals & Music","About Us",
+          "Activate SIM","Top Up","Switch & Save","Contact Us","Support",
+          "International Calls","Exit"
+        ]
+      )
+  }
+}
 
 function showRating(){
+  bot("Please rate your experience with Zovie.")
+  const row = document.createElement("div")
+  row.className = "rating-row"
+  row.innerHTML = `
+    <span class="star">★</span><span class="star">★</span>
+    <span class="star">★</span><span class="star">★</span><span class="star">★</span>
+    <div id="feedbackForm" style="display:none;margin-top:10px">
+      <input id="fname"    class="feedback-input" placeholder="Name">
+      <input id="fphone"   class="feedback-input" placeholder="Phone">
+      <input id="femail"   class="feedback-input" placeholder="Email">
+      <textarea id="ffeedback" class="feedback-input" rows="3" placeholder="Describe your issue"></textarea>
+      <button onclick="submitFeedback()"
+        style="margin-top:8px;background:#7c3aed;color:white;border:none;
+               padding:8px 18px;border-radius:18px;cursor:pointer">Submit</button>
+    </div>
+  `
+  messages.appendChild(row)
+  messages.scrollTop = messages.scrollHeight
 
-bot("Please rate your experience with Zovie.")
-
-const row=document.createElement("div")
-
-row.innerHTML=`
-
-<span class="star">★</span>
-<span class="star">★</span>
-<span class="star">★</span>
-<span class="star">★</span>
-<span class="star">★</span>
-
-<div id="feedbackForm" style="display:none">
-
-<input id="name" class="feedback-input" placeholder="Name">
-<input id="phone" class="feedback-input" placeholder="Phone">
-<input id="email" class="feedback-input" placeholder="Email">
-<textarea id="feedback" class="feedback-input" placeholder="Describe your issue"></textarea>
-
-<button onclick="submitFeedback()">Submit</button>
-
-</div>
-`
-
-messages.appendChild(row)
-
-const stars=row.querySelectorAll(".star")
-
-stars.forEach((s,i)=>{
-
-s.onclick=()=>{
-
-selectedRating=i+1
-
-stars.forEach(st=>st.classList.remove("active"))
-
-for(let j=0;j<=i;j++) stars[j].classList.add("active")
-
-if(selectedRating>=4){
-
-bot("Thank you for using Zovie. We appreciate your feedback.")
-
-}else{
-
-document.getElementById("feedbackForm").style.display="block"
-
+  const stars = row.querySelectorAll(".star")
+  stars.forEach((s, i) => {
+    s.onclick = () => {
+      selectedRating = i + 1
+      stars.forEach(st => st.classList.remove("active"))
+      for(let j = 0; j <= i; j++) stars[j].classList.add("active")
+      if(selectedRating >= 4){
+        bot("Thank you for using Zovie! We appreciate your positive feedback. 😊")
+      } else {
+        document.getElementById("feedbackForm").style.display = "block"
+      }
+    }
+  })
 }
-
-}
-
-})
-
-}
-
-/* FEEDBACK */
 
 async function submitFeedback(){
-
-const data={
-rating:selectedRating,
-name:document.getElementById("name").value,
-phone:document.getElementById("phone").value,
-email:document.getElementById("email").value,
-message:document.getElementById("feedback").value
+  const data = {
+    rating:  selectedRating,
+    name:    document.getElementById("fname").value,
+    phone:   document.getElementById("fphone").value,
+    email:   document.getElementById("femail").value,
+    message: document.getElementById("ffeedback").value
+  }
+  try{
+    await fetch("/feedback/", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(data)
+    })
+  }catch(e){}
+  bot("Thank you! A live agent will contact you shortly. 🙏")
 }
 
-await fetch("/feedback/",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify(data)
+/* ── SINGLE SEND FUNCTION — keyboard & mic both call this ── */
+function sendMessage(textOverride){
+  if(isSending) return
+
+  const text = (textOverride !== undefined ? textOverride : input.value).trim()
+  if(!text) return
+
+  isSending = true
+  input.value = ""
+
+  userBubble(text)
+
+  const canonical = resolveChoice(text)
+  if(canonical){
+    processChoice(canonical)
+  } else {
+    bot(
+      `I didn't recognise "${text}". Please choose an option below.`,
+      [
+        "Zoiko Plans","Business Deals","Devices","Animals & Music","About Us",
+        "Activate SIM","Top Up","Switch & Save","Contact Us","Support",
+        "International Calls","Exit"
+      ]
+    )
+  }
+
+  setTimeout(() => { isSending = false }, 400)
+}
+
+/* ── SEND BUTTON ── */
+sendBtn.onclick = () => sendMessage()
+
+/* ── ENTER KEY ── */
+input.addEventListener("keydown", e => {
+  if(e.key === "Enter"){ e.preventDefault(); sendMessage() }
 })
 
-bot("Thank you. A live agent will contact you shortly.")
+/* ── SPEECH RECOGNITION ── */
+if("webkitSpeechRecognition" in window || "SpeechRecognition" in window){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+  recognition = new SR()
+  recognition.lang            = "en-GB"
+  recognition.continuous      = false
+  recognition.interimResults  = false
+  recognition.maxAlternatives = 1
 
+  recognition.onstart = () => {
+    isListening = true
+    micBtn.classList.add("listening")
+    micStatus.innerText = "🎙️ Listening… speak now"
+  }
+
+  recognition.onend = () => {
+    isListening = false
+    micBtn.classList.remove("listening")
+    setTimeout(() => { micStatus.innerText = "" }, 2000)
+  }
+
+  recognition.onerror = e => {
+    isListening = false
+    micBtn.classList.remove("listening")
+    micStatus.innerText =
+      e.error === "no-speech" ? "No speech detected. Try again."
+                              : "Mic error: " + e.error
+    setTimeout(() => { micStatus.innerText = "" }, 3000)
+  }
+
+  /* spoken text goes DIRECTLY into sendMessage — same path as keyboard */
+  recognition.onresult = e => {
+    const spoken = e.results[0][0].transcript.trim()
+    micStatus.innerText = `✅ Heard: "${spoken}"`
+    sendMessage(spoken)
+  }
 }
 
-/* SEND */
-
-document.getElementById("send").onclick=()=>{
-
-const text=input.value.trim()
-
-if(!text) return
-
-user(text)
-
-input.value=""
-
-menuHandler(text)
-
+/* ── MIC BUTTON ── */
+micBtn.onclick = () => {
+  if(!recognition){
+    micStatus.innerText = "Speech recognition not supported in this browser."
+    setTimeout(() => { micStatus.innerText = "" }, 3000)
+    return
+  }
+  if(isListening){
+    recognition.stop()
+  } else {
+    try{ recognition.start() }
+    catch(e){ micStatus.innerText = "Mic busy — try again." }
+  }
 }
 
-/* VOICE */
-
-mic.onclick=()=>{
-
-const recognition=new(window.SpeechRecognition||window.webkitSpeechRecognition)()
-
-recognition.lang="en-GB"
-
-mic.classList.add("listening")
-
-recognition.start()
-
-recognition.onresult=e=>{
-
-mic.classList.remove("listening")
-
-const text=e.results[0][0].transcript
-
-input.value=text
-
-document.getElementById("send").click()
-
+/* ── OPEN / CLOSE ── */
+document.getElementById("chat-toggle").onclick = () => {
+  document.getElementById("chatbot").style.display = "flex"
+  messages.innerHTML = ""
+  mainMenu()
 }
 
-}
-
-/* START */
-
-document.getElementById("chat-toggle").onclick=()=>{
-document.getElementById("chatbot").style.display="flex"
-messages.innerHTML=""
-mainMenu()
-}
-
-document.getElementById("close").onclick=()=>{
-document.getElementById("chatbot").style.display="none"
+document.getElementById("close").onclick = () => {
+  speechSynthesis.cancel()
+  if(recognition && isListening) recognition.stop()
+  document.getElementById("chatbot").style.display = "none"
 }
 
 </script>
-
 </body>
 </html>
